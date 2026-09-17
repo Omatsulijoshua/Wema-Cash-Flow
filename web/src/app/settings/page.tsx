@@ -196,16 +196,16 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Demo Controls & Reset */}
+      {/* Data Controls & Clear */}
       <div className="bg-white border border-rose-200/80 rounded-2xl p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h3 className="text-sm font-extrabold text-slate-900">Reset Demo State</h3>
+          <h3 className="text-sm font-extrabold text-slate-900">Clear Stored Transactions</h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Clear all uploaded demo files, reset filters, re-initialize chat, and restore default 6-month baseline data.
+            Wipes all imported statements, transactions, and batches from your browser storage to start completely fresh.
           </p>
           {resetSuccess && (
             <span className="text-xs font-bold text-emerald-700 mt-2 block">
-              ✓ Demo data successfully reset to baseline!
+              ✓ All transaction data successfully cleared!
             </span>
           )}
         </div>
@@ -215,7 +215,7 @@ export default function SettingsPage() {
           className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold rounded-xl transition shadow-sm flex items-center space-x-2 whitespace-nowrap self-start sm:self-auto"
         >
           <RotateCcw size={14} />
-          <span>Reset Demo</span>
+          <span>Clear All Data</span>
         </button>
       </div>
     </DashboardShell>

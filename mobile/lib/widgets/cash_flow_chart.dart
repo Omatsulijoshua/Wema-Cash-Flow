@@ -112,9 +112,19 @@ class _CashFlowChartWidgetState extends State<CashFlowChartWidget> {
               _buildLegend('Net Flow', const Color(0xFF2563EB)),
             ],
           ),
-          const SizedBox(height: 24),
-          SizedBox(
-            height: 200,
+          if (widget.points.isEmpty)
+            Container(
+              height: 160,
+              alignment: Alignment.center,
+              child: const Text(
+                'No cash flow data available yet.\nImport transactions to view monthly inflow vs outflow.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8), height: 1.5),
+              ),
+            )
+          else
+            SizedBox(
+              height: 200,
             child: BarChart(
               BarChartData(
                 alignment: BarChartAlignment.spaceAround,

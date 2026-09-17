@@ -137,10 +137,20 @@ class ForecastChartWidget extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 180,
-            child: LineChart(
+          if (points.length < 2)
+            Container(
+              height: 140,
+              alignment: Alignment.center,
+              child: const Text(
+                'Insufficient historical data to compute forecast.\nImport your bank statement to project 30-day runway.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8), height: 1.5),
+              ),
+            )
+          else ...[
+            SizedBox(
+              height: 180,
+              child: LineChart(
               LineChartData(
                 gridData: FlGridData(
                   show: true,
@@ -246,7 +256,8 @@ class ForecastChartWidget extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
+      ],
+    ),
+  );
+}
 }

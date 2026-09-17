@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useRef } from 'react';
-import { UploadCloud, FileText, Image as ImageIcon, Trash2, FolderOpen, AlertCircle } from 'lucide-react';
-import { useFinancialData } from '../../context/FinancialContext';
+import React, { useRef, useState } from 'react';
+import { UploadCloud, FileText, Image as ImageIcon, Trash2, Download, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useFinancial } from '../../context/FinancialContext';
 import { UploadedFile } from '../../types/financial';
 
 export const UploadDropzone: React.FC = () => {
@@ -11,12 +11,13 @@ export const UploadDropzone: React.FC = () => {
     addUploadedFiles,
     removeUploadedFile,
     clearUploadedFiles,
-    loadSampleFiles,
+    importCsvContent,
     simulateImport,
     isProcessing,
-  } = useFinancialData();
+  } = useFinancial();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importNotification, setImportNotification] = useState<string | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
@@ -32,6 +33,43 @@ export const UploadDropzone: React.FC = () => {
     }));
 
     addUploadedFiles(newFiles);
+
+    // If any CSV files are uploaded, parse them directly
+    for (const f of rawFiles) {
+      if (f.name.endsWith('.csv') || f.type.includes('csv')) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const content = event.target?.result as string;
+          if (content) {
+            const result = importCsvContent(content, f.name);
+            setImportNotification(`Imported ${result.imported} transactions from "${f.name}" (${result.duplicates} duplicates detected).`);
+            setTimeout(() => setImportNotification(null), 6000);
+          }
+        };
+        reader.readAsText(f);
+      }
+    }
+  };
+
+  const handleDownloadTemplate = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const headers = 'Date,Description,Amount,Type,Category\n';
+    const sampleRows = [
+      '2026-09-01,Salary / Retainer Inflow,750000,credit,Salary',
+      '2026-09-02,Ikeja Electric Prepaid Recharge,18500,debit,Utilities',
+      '2026-09-03,Chowdeck Lagos Lunch,6200,debit,Food',
+      '2026-09-04,Uber Trip Victoria Island,4500,debit,Transport',
+      '2026-09-05,Swift Fibre Internet,25000,debit,Utilities',
+    ].join('\n');
+
+    const blob = new Blob([headers + sampleRows], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'wema_cashflow_template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const formatSize = (bytes: number) => {
@@ -42,6 +80,14 @@ export const UploadDropzone: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Import Toast / Banner */}
+      {importNotification && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center space-x-3 text-emerald-800 text-xs font-bold animate-in fade-in slide-in-from-top-2">
+          <CheckCircle2 size={18} className="text-emerald-600 flex-shrink-0" />
+          <span>{importNotification}</span>
+        </div>
+      )}
+
       {/* Dropzone Area */}
       <div
         onClick={() => fileInputRef.current?.click()}
@@ -61,29 +107,28 @@ export const UploadDropzone: React.FC = () => {
         </div>
 
         <h3 className="text-base font-extrabold text-slate-900 mb-1">
-          Upload transaction screenshots, statements or files
+          Upload bank statements or CSV files
         </h3>
         <p className="text-xs text-slate-500 max-w-md mx-auto mb-4">
-          Drag and drop multi-page statements or app screenshots here. Multi-file upload supported.
+          Drop your real CSV bank statements, PDFs, or receipts here. Multi-file upload supported.
         </p>
 
         <div className="flex flex-wrap items-center justify-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-6">
+          <span className="px-2 py-0.5 rounded bg-slate-100">CSV</span>
+          <span className="px-2 py-0.5 rounded bg-slate-100">PDF</span>
           <span className="px-2 py-0.5 rounded bg-slate-100">PNG</span>
           <span className="px-2 py-0.5 rounded bg-slate-100">JPG</span>
-          <span className="px-2 py-0.5 rounded bg-slate-100">PDF</span>
-          <span className="px-2 py-0.5 rounded bg-slate-100">CSV</span>
-          <span className="px-2 py-0.5 rounded bg-slate-100">EXCEL</span>
         </div>
 
-        {/* Quick Demo Pre-load Button */}
+        {/* Download CSV Template Button */}
         <div className="inline-flex items-center space-x-2" onClick={e => e.stopPropagation()}>
           <button
             type="button"
-            onClick={loadSampleFiles}
+            onClick={handleDownloadTemplate}
             className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition shadow-xs"
           >
-            <FolderOpen size={15} className="text-[#7B0046]" />
-            <span>Load Sample Bank Statements & Screenshots (4 Demo Files)</span>
+            <Download size={14} className="text-[#7B0046]" />
+            <span>Download CSV Statement Template</span>
           </button>
         </div>
       </div>
@@ -97,7 +142,7 @@ export const UploadDropzone: React.FC = () => {
                 Uploaded Files ({uploadedFiles.length})
               </h4>
               <span className="text-xs font-medium text-slate-400">
-                Ready for AI extraction
+                Ready for processing
               </span>
             </div>
             <button
@@ -154,7 +199,7 @@ export const UploadDropzone: React.FC = () => {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-100">
             <div className="flex items-center space-x-2 text-xs text-slate-500">
               <AlertCircle size={15} className="text-[#7B0046]" />
-              <span>Simulated client-side processing pipeline · No bank credentials stored</span>
+              <span>Client-side parsing & extraction · No sensitive bank credentials stored</span>
             </div>
 
             <button
@@ -163,7 +208,7 @@ export const UploadDropzone: React.FC = () => {
               className="w-full sm:w-auto px-6 py-3 bg-[#7B0046] hover:bg-[#9E1B4C] text-white text-xs font-extrabold rounded-xl shadow-md transition flex items-center justify-center space-x-2 disabled:opacity-50"
             >
               <UploadCloud size={16} />
-              <span>Start Financial Intelligence Extraction</span>
+              <span>Process Files</span>
             </button>
           </div>
         </div>

@@ -18,6 +18,30 @@ export const ForecastLineChart: React.FC<ForecastLineChartProps> = ({
 }) => {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
+  if (!points || points.length < 2) {
+    return (
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-5 sm:p-6 shadow-sm">
+        <div className="flex items-center space-x-2 mb-1">
+          <h2 className="text-base font-bold text-slate-900">30-Day Cash-Flow Forecast</h2>
+          <span className="flex items-center space-x-1 text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full border border-amber-200">
+            <Sparkles size={11} />
+            <span>Simulation</span>
+          </span>
+        </div>
+        <p className="text-xs text-slate-500 font-medium mb-6">
+          Historical balance trajectory transitioning to 30-day runway projection
+        </p>
+        <div className="h-44 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center p-6 text-center">
+          <Info size={24} className="text-slate-400 mb-2" />
+          <p className="text-xs font-bold text-slate-700">Insufficient Historical Data</p>
+          <p className="text-[11px] text-slate-400 max-w-sm mt-1">
+            Import your bank statement to calculate daily spending burn rate and generate 30-day balance runway forecasts.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // SVG dimensions
   const width = 600;
   const height = 220;

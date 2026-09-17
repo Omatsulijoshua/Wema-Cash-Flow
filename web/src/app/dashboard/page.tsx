@@ -28,6 +28,28 @@ export default function DashboardPage() {
 
   return (
     <DashboardShell>
+      {/* Empty State Prompt if no transactions */}
+      {transactions.length === 0 && (
+        <div className="bg-white border-2 border-dashed border-slate-300 rounded-3xl p-8 text-center shadow-xs mb-6">
+          <div className="w-12 h-12 rounded-2xl bg-pink-50 text-[#7B0046] flex items-center justify-center mx-auto mb-3">
+            <FileSpreadsheet size={24} />
+          </div>
+          <h3 className="text-sm font-extrabold text-slate-900 mb-1">
+            No Transactions Imported Yet
+          </h3>
+          <p className="text-xs text-slate-500 max-w-md mx-auto mb-4">
+            Upload your bank statement or CSV file in the Import section to see real cash-flow summaries, spending categories, and balance projections.
+          </p>
+          <Link
+            href="/import"
+            className="inline-flex items-center space-x-2 px-4 py-2 rounded-xl bg-[#7B0046] hover:bg-[#9E1B4C] text-white text-xs font-bold transition shadow-sm"
+          >
+            <span>Import Bank Statement / CSV</span>
+            <ArrowRight size={13} />
+          </Link>
+        </div>
+      )}
+
       {/* KPI Cards Grid */}
       {!isBusiness ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -20,6 +20,23 @@ export const CashFlowBarChart: React.FC<CashFlowBarChartProps> = ({
 
   const ranges: Array<'7D' | '30D' | '3M' | '6M' | '1Y'> = ['7D', '30D', '3M', '6M', '1Y'];
 
+  if (!points || points.length === 0) {
+    return (
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-5 sm:p-6 shadow-sm">
+        <div className="mb-6">
+          <h2 className="text-base font-bold text-slate-900">{title}</h2>
+          <p className="text-xs text-slate-500 font-medium">{subtitle}</p>
+        </div>
+        <div className="h-48 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center p-6 text-center">
+          <p className="text-xs font-bold text-slate-700">No Cash Flow Data Available</p>
+          <p className="text-[11px] text-slate-400 max-w-sm mt-1">
+            Import your bank statement or CSV file to view monthly inflow vs outflow comparisons.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // Calculate max scale
   const maxVal = Math.max(...points.map(p => Math.max(p.income, p.expense, Math.abs(p.net))), 5000000);
 

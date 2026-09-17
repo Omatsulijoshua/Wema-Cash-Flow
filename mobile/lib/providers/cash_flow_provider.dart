@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import '../models/transaction_item.dart';
 import '../models/recurring_payment.dart';
@@ -6,8 +7,8 @@ import '../models/import_batch.dart';
 import '../models/cash_flow_summary.dart';
 import '../models/insight_item.dart';
 import '../models/chat_message.dart';
-import '../data/mock_data.dart';
 import '../services/financial_engine.dart';
+import '../services/categorization_engine.dart';
 import '../services/chat_engine.dart';
 
 class CashFlowProvider extends ChangeNotifier {
@@ -25,8 +26,6 @@ class CashFlowProvider extends ChangeNotifier {
   int _importStepIndex = 0;
   String _importStepMessage = '';
   bool _importCompleted = false;
-  int _detectedCount = 0;
-  int _uniqueCount = 0;
   int _duplicatesCount = 0;
   int _reviewsCount = 0;
   List<TransactionItem> _duplicateTransactions = [];
@@ -45,8 +44,8 @@ class CashFlowProvider extends ChangeNotifier {
   int get importStepIndex => _importStepIndex;
   String get importStepMessage => _importStepMessage;
   bool get importCompleted => _importCompleted;
-  int get detectedCount => _detectedCount;
-  int get uniqueCount => _uniqueCount;
+  int get detectedCount => _transactions.length + _duplicateTransactions.length;
+  int get uniqueCount => _transactions.length;
   int get duplicatesCount => _duplicatesCount;
   int get reviewsCount => _reviewsCount;
   List<TransactionItem> get duplicateTransactions => _duplicateTransactions;
@@ -59,8 +58,9 @@ class CashFlowProvider extends ChangeNotifier {
       );
 
   List<InsightItem> get insights => FinancialEngine.generateInsights(
+        transactions: _transactions,
+        summary: summary,
         isBusinessMode: _isBusinessMode,
-        scenario: _currentScenario,
       );
 
   CashFlowProvider() {
@@ -68,27 +68,29 @@ class CashFlowProvider extends ChangeNotifier {
   }
 
   void _initializeData() {
-    _transactions = MockData.generateTransactions();
-    _recurringPayments = MockData.getRecurringPayments();
-    _importHistory = MockData.getImportHistory();
+    _transactions = [];
+    _recurringPayments = [];
+    _importHistory = [];
     _isBusinessMode = false;
     _currentScenario = DemoScenario.personalNormal;
     _uploadedFiles = [];
     _isProcessingImport = false;
     _importCompleted = false;
+    _duplicatesCount = 0;
+    _reviewsCount = 0;
+    _duplicateTransactions = [];
+    _reviewTransactions = [];
 
     _chatMessages = [
       ChatMessage(
         id: 'welcome-1',
         sender: MessageSender.assistant,
-        text: 'Hello! I am your Wema CashFlow Intelligence Assistant. I have analyzed your recent 6 months of banking activity. What would you like to explore today?',
-        timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
+        text:
+            'Hello! I am your Wema CashFlow Intelligence Assistant. When you import transactions or statements, I will analyze your spending patterns, detect recurring commitments, and answer any financial questions.',
+        timestamp: DateTime.now(),
         quickFollowUps: const [
-          'Why did my expenses increase?',
-          'How much did I spend on food this month?',
-          'What are my recurring payments?',
-          'Where did I spend the most?',
-          'Can I afford my usual expenses?',
+          'How do I import a CSV?',
+          'What are the features of Wema CashFlow?',
         ],
       ),
     ];
@@ -97,40 +99,52 @@ class CashFlowProvider extends ChangeNotifier {
 
   void setBusinessMode(bool value) {
     _isBusinessMode = value;
-    if (_isBusinessMode && _currentScenario != DemoScenario.smeGrowingRevenue && _currentScenario != DemoScenario.smeRisingExpenses) {
-      _currentScenario = DemoScenario.smeGrowingRevenue;
-    } else if (!_isBusinessMode && (_currentScenario == DemoScenario.smeGrowingRevenue || _currentScenario == DemoScenario.smeRisingExpenses)) {
-      _currentScenario = DemoScenario.personalNormal;
-    }
     notifyListeners();
   }
 
   void setScenario(DemoScenario scenario) {
     _currentScenario = scenario;
-    if (scenario == DemoScenario.smeGrowingRevenue || scenario == DemoScenario.smeRisingExpenses) {
-      _isBusinessMode = true;
-    } else {
-      _isBusinessMode = false;
-    }
+    notifyListeners();
+  }
+
+  void clearAllData() {
+    _transactions = [];
+    _recurringPayments = [];
+    _importHistory = [];
+    _uploadedFiles = [];
+    _duplicateTransactions = [];
+    _reviewTransactions = [];
+    _duplicatesCount = 0;
+    _reviewsCount = 0;
+    _importCompleted = false;
     notifyListeners();
   }
 
   void resetDemo() {
-    _initializeData();
+    clearAllData();
+  }
+
+  void addTransaction(TransactionItem item) {
+    _transactions.insert(0, item);
+    _detectRecurringPayments();
+    notifyListeners();
   }
 
   void updateTransactionCategory(String id, String newCategory) {
-    final idx = _transactions.indexWhere((t) => t.id == id);
-    if (idx != -1) {
-      _transactions[idx] = _transactions[idx].copyWith(
+    final index = _transactions.indexWhere((t) => t.id == id);
+    if (index != -1) {
+      final old = _transactions[index];
+      _transactions[index] = old.copyWith(
         category: newCategory,
         categoryConfidence: 1.0,
+        needsReview: false,
       );
+      _reviewTransactions.removeWhere((t) => t.id == id);
+      _reviewsCount = _reviewTransactions.length;
       notifyListeners();
     }
   }
 
-  // Upload Management
   void addUploadedFiles(List<UploadedFileModel> files) {
     _uploadedFiles.addAll(files);
     notifyListeners();
@@ -143,7 +157,6 @@ class CashFlowProvider extends ChangeNotifier {
 
   void clearUploadedFiles() {
     _uploadedFiles.clear();
-    _isProcessingImport = false;
     _importCompleted = false;
     notifyListeners();
   }
@@ -151,171 +164,210 @@ class CashFlowProvider extends ChangeNotifier {
   void loadSampleFiles() {
     _uploadedFiles = [
       UploadedFileModel(
-        id: 'file-1',
-        name: 'Wema_Bank_Statement_Aug_Sep.pdf',
-        sizeBytes: 1240000,
-        fileType: 'application/pdf',
-      ),
-      UploadedFileModel(
-        id: 'file-2',
-        name: 'POS_Receipts_Lekki_Shoprite.png',
-        sizeBytes: 840000,
-        fileType: 'image/png',
-      ),
-      UploadedFileModel(
-        id: 'file-3',
-        name: 'Uber_Taxify_Receipts_Sep.png',
-        sizeBytes: 620000,
-        fileType: 'image/png',
-      ),
-      UploadedFileModel(
-        id: 'file-4',
-        name: 'Business_Invoices_Settlement.csv',
-        sizeBytes: 310000,
+        id: 'up-1',
+        name: 'wema_bank_statement.csv',
+        sizeBytes: 24576,
         fileType: 'text/csv',
       ),
     ];
     notifyListeners();
   }
 
-  // Timed State Machine for Simulated Screenshot OCR
-  Future<void> simulateOcrImport() async {
-    _isProcessingImport = true;
-    _importCompleted = false;
-    _importStepIndex = 0;
-    notifyListeners();
+  // Real CSV Statement Parser for Flutter
+  void importCsv(String csvContent, {String? fileName}) {
+    final lines = csvContent.split(RegExp(r'\r?\n')).where((l) => l.trim().isNotEmpty).toList();
+    if (lines.length < 2) return;
 
-    final steps = [
-      'Reading uploaded files and metadata...',
-      'Extracting transaction lines and timestamps...',
-      'Detecting duplicate transactions across statements...',
-      'Normalizing amounts and merchant descriptions...',
-      'Running intelligent categorization engine...',
-      'Calculating net cash flow, runaways and trends...',
-      'Generating actionable financial insights...',
-    ];
+    final header = lines[0].toLowerCase().split(',');
+    int dateIdx = header.indexWhere((h) => h.contains('date'));
+    int descIdx = header.indexWhere((h) => h.contains('desc') || h.contains('narrat') || h.contains('title'));
+    int amtIdx = header.indexWhere((h) => h.contains('amount') || h.contains('sum') || h.contains('val'));
+    int typeIdx = header.indexWhere((h) => h.contains('type') || h.contains('dr') || h.contains('cr'));
+    int catIdx = header.indexWhere((h) => h.contains('cat'));
 
-    for (int i = 0; i < steps.length; i++) {
-      _importStepIndex = i;
-      _importStepMessage = steps[i];
-      notifyListeners();
-      await Future.delayed(const Duration(milliseconds: 650));
+    if (dateIdx == -1) dateIdx = 0;
+    if (descIdx == -1) descIdx = 1;
+    if (amtIdx == -1) amtIdx = 2;
+
+    final List<TransactionItem> newItems = [];
+    final Set<String> existingSignatures = _transactions
+        .map((t) => '${t.date.toIso8601String().split("T")[0]}_${t.title.trim().toLowerCase()}_${t.amount}')
+        .toSet();
+
+    for (int i = 1; i < lines.length; i++) {
+      final cols = lines[i].split(',').map((c) => c.trim().replaceAll('"', '')).toList();
+      if (cols.length <= max(dateIdx, max(descIdx, amtIdx))) continue;
+
+      final rawDate = cols[dateIdx];
+      final title = cols[descIdx];
+      final rawAmt = double.tryParse(cols[amtIdx].replaceAll(RegExp(r'[^0-9.-]'), '')) ?? 0.0;
+      if (rawAmt == 0.0) continue;
+
+      TransactionType type = TransactionType.debit;
+      if (typeIdx != -1 && cols.length > typeIdx) {
+        final tStr = cols[typeIdx].toLowerCase();
+        if (tStr.contains('cr') || tStr.contains('in') || tStr.contains('dep')) {
+          type = TransactionType.credit;
+        }
+      }
+
+      DateTime date;
+      try {
+        date = DateTime.parse(rawDate);
+      } catch (_) {
+        date = DateTime.now();
+      }
+
+      String category = 'Other';
+      double confidence = 0.85;
+
+      if (catIdx != -1 && cols.length > catIdx && cols[catIdx].isNotEmpty) {
+        category = cols[catIdx];
+        confidence = 0.95;
+      } else {
+        final catResult = CategorizationEngine.categorize(title);
+        category = catResult.category;
+        confidence = catResult.confidence;
+      }
+
+      final signature = '${date.toIso8601String().split("T")[0]}_${title.trim().toLowerCase()}_${rawAmt.abs()}';
+
+      final item = TransactionItem(
+        id: 'tx-${DateTime.now().millisecondsSinceEpoch}-$i',
+        title: title,
+        description: 'Imported from ${fileName ?? "statement"}',
+        amount: rawAmt.abs(),
+        type: type,
+        category: category,
+        categoryConfidence: confidence,
+        date: date,
+        reference: 'REF-${100000 + i}',
+        balanceAfter: 0.0,
+        status: 'Completed',
+        paymentChannel: 'TRANSFER',
+      );
+
+      if (existingSignatures.contains(signature)) {
+        _duplicateTransactions.add(item);
+      } else {
+        existingSignatures.add(signature);
+        newItems.add(item);
+        if (confidence < 0.7) {
+          _reviewTransactions.add(item);
+        }
+      }
     }
 
-    _detectedCount = 287;
-    _uniqueCount = 274;
-    _duplicatesCount = 13;
-    _reviewsCount = 6;
+    if (newItems.isNotEmpty) {
+      _transactions.insertAll(0, newItems);
+      _detectRecurringPayments();
+    }
 
-    // Seed duplicate list for interactive review
-    _duplicateTransactions = [
-      TransactionItem(
-        id: 'dup-1',
-        title: 'Uber Nigeria Ride',
-        description: 'Duplicate detected from statement & receipt screenshot',
-        amount: 8500.0,
-        type: TransactionType.debit,
-        category: 'Transport',
-        categoryConfidence: 0.98,
-        date: DateTime(2026, 9, 15, 18, 45),
-        reference: 'WMA-CARD-881293',
-        balanceAfter: 178500.0,
-        isDuplicate: true,
-      ),
-      TransactionItem(
-        id: 'dup-2',
-        title: 'Swift 4G Fibre Internet',
-        description: 'Auto-debit matching invoice screenshot',
-        amount: 20000.0,
-        type: TransactionType.debit,
-        category: 'Utilities',
-        categoryConfidence: 0.97,
-        date: DateTime(2026, 9, 3, 10, 0),
-        reference: 'SWF-REC-773194',
-        balanceAfter: 336700.0,
-        isDuplicate: true,
-      ),
-      TransactionItem(
-        id: 'dup-3',
-        title: 'Shoprite Lekki Retail',
-        description: 'Duplicate transaction matched via exact timestamp',
-        amount: 45200.0,
-        type: TransactionType.debit,
-        category: 'Shopping',
-        categoryConfidence: 0.96,
-        date: DateTime(2026, 9, 14, 16, 20),
-        reference: 'POS-SHPR-441209',
-        balanceAfter: 187000.0,
-        isDuplicate: true,
-      ),
-    ];
+    _duplicatesCount = _duplicateTransactions.length;
+    _reviewsCount = _reviewTransactions.length;
 
-    // Seed review list for low-confidence confirmation
-    _reviewTransactions = [
-      TransactionItem(
-        id: 'rev-1',
-        title: 'PAY_GATE*TRF 009214',
-        description: 'Ambiguous merchant reference detected in receipt OCR',
-        amount: 14500.0,
-        type: TransactionType.debit,
-        category: 'Other',
-        categoryConfidence: 0.62,
-        date: DateTime(2026, 9, 11, 14, 12),
-        reference: 'UNK-REC-009214',
-        balanceAfter: 280000.0,
-        needsReview: true,
-      ),
-      TransactionItem(
-        id: 'rev-2',
-        title: 'DIRECT CREDIT REF 88123',
-        description: 'Uncategorized third-party inflow from corporate entity',
-        amount: 85000.0,
-        type: TransactionType.credit,
-        category: 'Business Revenue',
-        categoryConfidence: 0.68,
-        date: DateTime(2026, 9, 9, 16, 40),
-        reference: 'UNK-IN-88123',
-        balanceAfter: 365000.0,
-        needsReview: true,
-      ),
-    ];
-
-    // Add new entry to import history
     _importHistory.insert(
       0,
       ImportBatch(
         id: 'imp-${DateTime.now().millisecondsSinceEpoch}',
         date: DateTime.now(),
-        fileCount: _uploadedFiles.isEmpty ? 4 : _uploadedFiles.length,
-        totalDetected: _detectedCount,
-        uniqueCount: _uniqueCount,
-        duplicateCount: _duplicatesCount,
-        reviewNeededCount: _reviewsCount,
+        fileCount: 1,
+        totalDetected: newItems.length + _duplicateTransactions.length,
+        uniqueCount: newItems.length,
+        duplicateCount: _duplicateTransactions.length,
+        reviewNeededCount: _reviewTransactions.length,
         status: 'Completed',
       ),
     );
+
+    notifyListeners();
+  }
+
+  void _detectRecurringPayments() {
+    final Map<String, List<TransactionItem>> map = {};
+    for (final t in _transactions) {
+      if (t.type == TransactionType.debit) {
+        final key = t.title.toLowerCase().trim();
+        map.putIfAbsent(key, () => []).add(t);
+      }
+    }
+
+    final List<RecurringPayment> detected = [];
+    int idCount = 1;
+    for (final entry in map.entries) {
+      if (entry.value.length >= 2) {
+        final first = entry.value.first;
+        final bool amountsMatch = entry.value.every((t) => (t.amount - first.amount).abs() < 500);
+        if (amountsMatch) {
+          detected.add(RecurringPayment(
+            id: 'rec-${idCount++}',
+            title: first.title,
+            category: first.category,
+            amount: first.amount,
+            frequency: 'Monthly',
+            nextDueDate: DateTime(2026, 10, 1),
+            status: RecurringStatus.active,
+            provider: first.title,
+            channel: 'TRANSFER',
+          ));
+        }
+      }
+    }
+    _recurringPayments = detected;
+  }
+
+  Future<void> simulateImport() async {
+    if (_uploadedFiles.isEmpty) return;
+
+    _isProcessingImport = true;
+    _importStepIndex = 1;
+    _importStepMessage = '1/7 File Received: Validating format and integrity...';
+    notifyListeners();
+
+    final steps = [
+      '2/7 OCR Extraction: Detecting text and amount symbols...',
+      '3/7 Entity Parsing: Extracting dates, narrations, and values...',
+      '4/7 Duplicate Detection: Cross-referencing existing ledger...',
+      '5/7 Auto-Categorization: Applying 17 Nigerian banking rules...',
+      '6/7 Confidence Scoring: Flagging ambiguous transactions...',
+      '7/7 Processing Complete: Ready for review!',
+    ];
+
+    for (int i = 0; i < steps.length; i++) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      _importStepIndex = i + 2;
+      _importStepMessage = steps[i];
+      notifyListeners();
+    }
 
     _isProcessingImport = false;
     _importCompleted = true;
     notifyListeners();
   }
 
-  void removeDuplicateItem(String id) {
-    _duplicateTransactions.removeWhere((t) => t.id == id);
-    _duplicatesCount = (_duplicatesCount - 1).clamp(0, 99);
+  Future<void> simulateOcrImport() => simulateImport();
+
+  void keepDuplicate(String id) {
+    final dupIndex = _duplicateTransactions.indexWhere((d) => d.id == id);
+    if (dupIndex != -1) {
+      final dup = _duplicateTransactions.removeAt(dupIndex);
+      _transactions.insert(0, dup);
+      _duplicatesCount = _duplicateTransactions.length;
+      notifyListeners();
+    }
+  }
+
+  void removeDuplicate(String id) {
+    _duplicateTransactions.removeWhere((d) => d.id == id);
+    _duplicatesCount = _duplicateTransactions.length;
     notifyListeners();
   }
 
-  void resolveReviewItem(String id, String category) {
-    _reviewTransactions.removeWhere((t) => t.id == id);
-    _reviewsCount = (_reviewsCount - 1).clamp(0, 99);
-    notifyListeners();
-  }
+  void removeDuplicateItem(String id) => removeDuplicate(id);
 
-  // Ask Wema Chat
-  Future<void> sendChatMessage(String text) async {
+  Future<void> sendMessage(String text) async {
     final userMsg = ChatMessage(
-      id: 'msg-${DateTime.now().millisecondsSinceEpoch}',
+      id: 'usr-${DateTime.now().millisecondsSinceEpoch}',
       sender: MessageSender.user,
       text: text,
       timestamp: DateTime.now(),
@@ -323,16 +375,17 @@ class CashFlowProvider extends ChangeNotifier {
     _chatMessages.add(userMsg);
     notifyListeners();
 
-    // Simulate intelligent analytical processing
-    await Future.delayed(const Duration(milliseconds: 500));
+    await Future.delayed(const Duration(milliseconds: 400));
 
-    final aiReply = ChatEngine.answerQuery(
+    final botMsg = ChatEngine.answerQuery(
       query: text,
       summary: summary,
+      transactions: _transactions,
       isBusinessMode: _isBusinessMode,
     );
-
-    _chatMessages.add(aiReply);
+    _chatMessages.add(botMsg);
     notifyListeners();
   }
+
+  Future<void> sendChatMessage(String text) => sendMessage(text);
 }

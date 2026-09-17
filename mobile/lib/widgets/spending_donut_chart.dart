@@ -61,9 +61,20 @@ class _SpendingDonutChartWidgetState extends State<SpendingDonutChartWidget> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 180,
+          const SizedBox(height: 16),
+          if (widget.breakdowns.isEmpty)
+            Container(
+              height: 140,
+              alignment: Alignment.center,
+              child: const Text(
+                'No expense categories recorded yet.\nImport transactions to view spending breakdown.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8), height: 1.5),
+              ),
+            )
+          else ...[
+            SizedBox(
+              height: 180,
             child: PieChart(
               PieChartData(
                 pieTouchData: PieTouchData(
@@ -168,7 +179,8 @@ class _SpendingDonutChartWidgetState extends State<SpendingDonutChartWidget> {
             );
           }),
         ],
-      ),
-    );
-  }
+      ],
+    ),
+  );
+}
 }
