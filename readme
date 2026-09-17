@@ -1,0 +1,23 @@
+The Wema CashFlow
+
+Problem: Many customers, especially SMEs, don't have a clear picture of their cash flow.
+
+Idea: A banking intelligence platform that turns transaction history into useful insights:
+
+> “Your expenses increased 23% this month.”
+
+
+
+> “Your recurring payments are due soon.”
+
+
+
+> “Based on your previous activity, your balance may become low within X days.”
+
+
+
+Could also give SMEs simple revenue/expense categorization.
+
+MVP: Upload/simulate transaction data → automatic categorization → dashboard → cash-flow insights.
+
+This one is very demo-friendly because judges can immediately see the value.
