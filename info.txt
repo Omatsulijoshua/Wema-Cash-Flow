@@ -1,0 +1,1 @@
+database url: postgresql://postgres:[gzh3mizdIU9vMlgo]@db.glssewcemwhzqybelxwy.supabase.co:5432/postgres
