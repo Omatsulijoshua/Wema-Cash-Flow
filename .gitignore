@@ -1,5 +1,14 @@
 # Root .gitignore for Wema CashFlow
 
+# Python & Backend
+backend/.venv/
+.venv/
+__pycache__/
+backend/**/__pycache__/
+*.pyc
+.env
+.env*.local
+
 # Node & Next.js
 node_modules/
 **/node_modules/
@@ -9,6 +18,7 @@ out/
 build/
 .pnpm-store/
 *.log
+.vercel/
 
 # Flutter & Dart
 .dart_tool/
@@ -30,7 +40,3 @@ Thumbs.db
 *.user
 *.userosscache
 *.sln.docstates
-
-# Environment
-.env
-.env*.local

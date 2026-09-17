@@ -3,13 +3,44 @@
 > **Tagline:** *Turn your transactions into financial intelligence.*  
 > **Core Principle:** RAW TRANSACTION DATA → ORGANIZED DATA → FINANCIAL UNDERSTANDING → ACTIONABLE INSIGHTS.
 
-Wema CashFlow is a frontend-only banking intelligence prototype designed for individuals and SMEs. It transforms messy transaction records, statements, and receipts into clear cash-flow summaries, automatic category assignments, recurring payment tracking, anomaly alerts, 30-day balance forecasts, and conversational financial explanations.
+Wema CashFlow is a comprehensive financial intelligence platform designed for individuals and SMEs. It transforms messy transaction records, statements, and receipts into clear cash-flow summaries, automatic category assignments, recurring payment tracking, anomaly alerts, 30-day balance forecasts, and conversational financial explanations.
 
 ---
 
-## 🚀 Dual Platforms
+## 🏛️ Platform Architecture
 
-This repository contains two production-grade frontend prototypes built with bank-grade aesthetics:
+```
+                                Wema CashFlow Architecture
+                                
+       ┌────────────────────────────┐              ┌────────────────────────────┐
+       │     Mobile (Flutter)       │              │       Web (Next.js 16)     │
+       │  • Material 3 Wema Theme   │              │  • Turbopack + React 19    │
+       │  • 5-Tab Financial Shell   │              │  • Pure SVG Visualizations │
+       │  • Simulated OCR Pipeline  │              │  • Personal vs SME Switch  │
+       └──────────────┬─────────────┘              └──────────────┬─────────────┘
+                      │                                           │
+                      │               REST API (JSON)             │
+                      └─────────────────────┬─────────────────────┘
+                                            ▼
+                               ┌─────────────────────────┐
+                               │      Flask Backend      │
+                               │  • Transaction Engine   │
+                               │  • Auto-Categorization  │
+                               │  • Forecasting Engine   │
+                               │  • JWT Auth Scoping     │
+                               └────────────┬────────────┘
+                                            │
+                                            ▼
+                               ┌─────────────────────────┐
+                               │    Supabase Platform    │
+                               │  • Authentication (JWT) │
+                               │  • PostgreSQL DB + RLS  │
+                               └─────────────────────────┘
+```
+
+---
+
+## 🚀 Projects in this Repository
 
 ### 1. Web Application (`/web`)
 - **Stack**: Next.js 16 (Turbopack), React 19, TypeScript, Tailwind CSS 4, Lucide React, Pure SVG Responsive Charts.
@@ -33,14 +64,14 @@ This repository contains two production-grade frontend prototypes built with ban
   - Side-by-side duplicate comparison modal
   - 3-step onboarding walkthrough
 
----
-
-## 💡 Key Capabilities
-
-- **Realistic Nigerian Banking Dataset**: 220+ transactions across 6 months featuring POS, NIP, Web, USSD, Chowdeck, Uber, Ikeja Electric, MTN VTU, PiggyVest, and more.
-- **Strict Arithmetic Grounding**: All figures (₦428,500 balance, ₦1,840,000 inflow, ₦1,215,400 outflow, +₦624,600 net; SME ₦4.82M revenue, ~18d runway) match with mathematical consistency.
-- **Simulated 7-Stage OCR State Machine**: Visualizing receipt ingestion (*287 detected, 274 unique, 13 duplicates removed, 6 review items*).
-- **Dual Persona & Scenarios**: Instant switching between **Personal Mode** and **SME Mode**, plus 5 test scenarios (Normal, Salary Spike, Business Surplus, Low Runway, Irregular Gig).
+### 3. Backend API (`/backend`)
+- **Stack**: Python 3.10+, Flask, Supabase Python SDK, Gunicorn.
+- **Features**:
+  - Transaction ingestion (CSV & JSON)
+  - Categorization rule engine
+  - Cash-flow analytics, category breakdowns, and monthly trends
+  - Linear forecasting service
+  - Supabase JWT authentication and Row Level Security (RLS)
 
 ---
 
@@ -69,7 +100,38 @@ flutter run
 flutter run -d chrome
 ```
 
+### Backend (Flask)
+```bash
+cd backend
+python -m venv .venv
+# Windows:
+.venv\Scripts\activate
+# macOS/Linux:
+source .venv/bin/activate
+
+pip install -r requirements.txt
+cp .env.example .env
+python run.py
+# API running at http://localhost:5000
+```
+
+---
+
+## 🔌 API Endpoints Summary
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/health` | Public health check |
+| `POST` | `/api/transactions/import` | Upload statement CSV |
+| `GET` | `/api/transactions` | Paginated transactions |
+| `POST` | `/api/transactions` | Add manual transaction |
+| `GET` | `/api/analytics/summary` | Income, expenses, net cash flow |
+| `GET` | `/api/analytics/categories` | Spending breakdown by category |
+| `GET` | `/api/analytics/trends` | Monthly inflow/outflow trends |
+| `GET` | `/api/insights` | Smart spending insights & anomalies |
+| `GET` | `/api/forecast` | Linear 30-day to 12-month projection |
+
 ---
 
 ## 🔒 Security & Privacy Notice
-This prototype operates purely on simulated local datasets. No external backend, payment credentials, or cloud OCR endpoints are contacted.
+All sensitive database credentials and API keys are stored via environment variables. The client prototypes support both real API integration and isolated local simulated demonstrations.
