@@ -1,0 +1,36 @@
+# Root .gitignore for Wema CashFlow
+
+# Node & Next.js
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+out/
+build/
+.pnpm-store/
+*.log
+
+# Flutter & Dart
+.dart_tool/
+**/.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+mobile/build/
+**/build/
+
+# OS & IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Environment
+.env
+.env*.local
