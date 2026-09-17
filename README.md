@@ -1,391 +1,379 @@
 # CashFlow API
 
-Flask backend for the CashFlow financial intelligence platform. Provides transaction management, automatic categorization, and cash-flow insights for SMEs. Built for a hackathon.
+Production Flask backend for the CashFlow financial intelligence platform. Handles transaction processing, categorization, analytics, insights, and forecasting. Serves REST APIs to the Flutter mobile application.
 
 ## Overview
 
-CashFlow is a financial intelligence platform that turns transaction history into actionable insights. This repository contains the Flask backend that serves REST APIs to a Flutter mobile application.
+CashFlow is a financial intelligence platform designed to help SMEs understand their transaction history, spending patterns, and cash flow. This repository contains the Flask backend that processes business logic and communicates with Supabase for authentication and data persistence.
 
-**Current state:** The API is functional with in-memory transaction storage, automatic categorization, and basic cash-flow insights. No database, authentication, or persistent storage is implemented yet.
-
-## Tech Stack
-
-- Python
-- Flask
-- Flask-CORS
-
-## Architecture
+**Architecture:**
 
 ```
 Flutter Mobile App
         |
         | REST API (JSON)
         v
-  Flask Backend
+   Flask Backend
         |
+        | Supabase Client
         v
-  In-Memory Storage
+   Supabase
+   ├── Authentication (JWT)
+   └── PostgreSQL Database
 ```
 
-> **Note:** Data is stored in-memory and resets on each server restart. A database will be added in a future iteration.
+**Current state:** Transaction import, categorization, analytics, insights, and forecasting are implemented. Authentication is handled by Supabase — Flask validates JWT tokens and enforces user ownership.
+
+## Tech Stack
+
+- Python
+- Flask
+- Flask-CORS
+- Supabase (PostgreSQL + Auth)
+- PyJWT
+- Gunicorn
+- pytest
 
 ## Project Structure
 
 ```
 Wema-Cash-Flow/
 ├── backend/
-│   ├── app.py              # Flask application and all endpoints
+│   ├── app/
+│   │   ├── __init__.py          # App factory, blueprint registration
+│   │   ├── config.py            # Environment config
+│   │   ├── extensions.py        # Supabase client
+│   │   ├── middleware/
+│   │   │   └── auth.py          # @require_auth decorator
+│   │   ├── routes/
+│   │   │   ├── health.py        # GET /api/health
+│   │   │   ├── transactions.py  # Transaction CRUD + CSV import
+│   │   │   ├── analytics.py     # Summary, categories, trends
+│   │   │   ├── insights.py      # Smart spending insights
+│   │   │   └── forecast.py      # Linear forecast
+│   │   ├── models/
+│   │   │   └── __init__.py      # Transaction dataclass
+│   │   └── utils/
+│   │       ├── __init__.py      # categorize(), parse_csv_row()
+│   │       └── response.py      # success_response(), error_response()
+│   ├── tests/
+│   │   ├── conftest.py          # pytest fixtures
+│   │   ├── test_health.py
+│   │   ├── test_transactions.py
+│   │   ├── test_analytics.py
+│   │   ├── test_categorization.py
+│   │   └── test_parsing.py
 │   ├── api/
-│   │   └── index.py        # Vercel serverless entry point
-│   └── DEPLOY.md           # Vercel deployment guide
-├── requirements.txt        # Python dependencies
-├── vercel.json             # Vercel deployment configuration
+│   │   └── index.py             # Vercel serverless entry point
+│   ├── run.py                   # Local dev runner
+│   ├── requirements.txt
+│   └── .env.example
+├── vercel.json
 └── .gitignore
 ```
 
 ## Authentication
 
-No authentication is implemented. All endpoints are public.
+Flask does **not** handle registration or login. Supabase manages all authentication.
 
-**Planned:** JWT-based authentication with registration, login, and protected endpoints.
+**Flow:**
+1. User authenticates through Supabase (Flutter handles this)
+2. Supabase returns a JWT access token
+3. Flutter sends the token in the `Authorization: Bearer <token>` header
+4. Flask validates the JWT and extracts the `user_id`
+5. All data queries are scoped to the authenticated user
+
+Protected endpoints reject:
+- Missing token → `401 MISSING_TOKEN`
+- Expired token → `401 EXPIRED_TOKEN`
+- Invalid token → `401 INVALID_TOKEN`
 
 ## API Endpoints
 
-### Connectivity
+### Public
 
-| Method | Endpoint     | Description                        |
-|--------|--------------|------------------------------------|
-| GET    | `/`          | API status check                   |
-| GET    | `/api/health`| Health check                       |
-| GET    | `/api/test`  | Flutter-to-Flask connectivity test |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/health` | Health check |
 
-### Transactions
+### Protected (requires `Authorization: Bearer <token>`)
 
-| Method | Endpoint                  | Description                              |
-|--------|---------------------------|------------------------------------------|
-| GET    | `/api/transactions`       | List all transactions                    |
-| POST   | `/api/transactions`       | Add a transaction                        |
-| POST   | `/api/transactions/simulate` | Generate 20 sample transactions      |
-
-### Analytics
-
-| Method | Endpoint          | Description                              |
-|--------|-------------------|------------------------------------------|
-| GET    | `/api/insights`   | Cash-flow analysis and alerts            |
-| GET    | `/api/categories` | List income and expense categories       |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/transactions/import` | Import transactions from CSV |
+| GET | `/api/transactions` | List user's transactions (paginated) |
+| POST | `/api/transactions` | Add a single transaction |
+| GET | `/api/analytics/summary` | Income, expenses, net cash flow |
+| GET | `/api/analytics/categories` | Spending breakdown by category |
+| GET | `/api/analytics/trends` | Monthly income/expense trends |
+| GET | `/api/insights` | Smart spending insights |
+| GET | `/api/forecast` | Linear forecast (1-12 months) |
 
 ---
 
-### GET /
+### POST /api/transactions/import
 
+Upload a CSV file. Required columns: `date`, `description`, `amount`. Optional: `type`, `category`, `balance`.
+
+**Request:** `multipart/form-data` with field `file`
+
+**Response (201):**
 ```json
 {
-  "message": "CashFlow API is running",
-  "status": "success"
+  "success": true,
+  "data": {
+    "imported": 120,
+    "failed": 3,
+    "errors": ["Row 5: invalid or missing data"]
+  }
 }
 ```
 
-### GET /api/health
+### GET /api/transactions
 
-```json
-{
-  "status": "ok",
-  "service": "cashflow-api"
-}
-```
-
-### GET /api/test
-
-```json
-{
-  "message": "Flutter to Flask connection successful",
-  "backend": "Flask",
-  "status": "success"
-}
-```
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| page | int | 1 | Page number |
+| page_size | int | 50 | Results per page (max 100) |
+| start_date | string | - | Filter: start date (YYYY-MM-DD) |
+| end_date | string | - | Filter: end date (YYYY-MM-DD) |
+| category | string | - | Filter by category |
 
 ### POST /api/transactions
 
-**Request:**
-
 ```json
 {
-  "description": "Client Payment - Invoice 001",
+  "description": "Client Payment",
   "amount": 450000,
   "type": "income",
-  "date": "2025-07-15"
-}
-```
-
-> `date` is optional. Defaults to today.
-
-**Response (201):**
-
-```json
-{
-  "id": "a1b2c3d4-...",
   "date": "2025-07-15",
-  "description": "Client Payment - Invoice 001",
-  "amount": 450000,
-  "type": "income",
   "category": "client_payment"
 }
 ```
 
-The `category` field is automatically assigned based on keywords in the description.
+> `date` and `category` are optional. Category is auto-assigned if not provided.
 
-### POST /api/transactions/simulate
-
-Resets all transactions and generates 20 sample entries.
-
-**Response:**
+### GET /api/analytics/summary
 
 ```json
 {
-  "count": 20,
-  "message": "Simulated 20 transactions"
+  "success": true,
+  "data": {
+    "total_income": 1720000,
+    "total_expenses": 599500,
+    "net_cash_flow": 1120500,
+    "transaction_count": 120,
+    "latest_balance": 2340000
+  }
+}
+```
+
+### GET /api/analytics/categories
+
+```json
+{
+  "success": true,
+  "data": {
+    "categories": [
+      {"category": "rent", "total": 120000, "percentage": 20.0},
+      {"category": "food", "total": 85000, "percentage": 14.2}
+    ],
+    "total_expenses": 599500
+  }
+}
+```
+
+### GET /api/analytics/trends
+
+```json
+{
+  "success": true,
+  "data": {
+    "trends": [
+      {"month": "2025-05", "income": 560000, "expense": 210000, "net": 350000},
+      {"month": "2025-06", "income": 620000, "expense": 195000, "net": 425000}
+    ]
+  }
 }
 ```
 
 ### GET /api/insights
 
-Returns cash-flow analysis. Requires at least one transaction.
-
-**Response:**
-
 ```json
 {
-  "total_income": 1720000,
-  "total_expenses": 599500,
-  "net_cash_flow": 1120500,
-  "avg_daily_burn": 19983.33,
-  "days_until_low_funds": 56,
-  "category_breakdown": {
-    "rent": 120000,
-    "salaries": 120000,
-    "inventory": 180000
-  },
-  "top_expense_category": "inventory",
-  "alerts": []
+  "success": true,
+  "data": {
+    "insights": [
+      {
+        "type": "top_spending_category",
+        "title": "Highest Spending Category",
+        "message": "Your highest spending category is rent with ₦120,000.00.",
+        "value": 120000,
+        "category": "rent"
+      }
+    ]
+  }
 }
 ```
 
-### GET /api/categories
+### GET /api/forecast
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| months | int | 3 | Months to forecast (max 12) |
 
 ```json
 {
-  "income": ["salary", "client_payment", "loan_disbursement", "investment_return"],
-  "expense": ["rent", "utilities", "salaries", "inventory", "marketing", "transport", "office_supplies", "software", "loan_repayment"]
+  "success": true,
+  "data": {
+    "forecast": [
+      {"month": "2025-08", "income": 573333, "expense": 199833, "net": 373500}
+    ],
+    "method": "linear_average",
+    "disclaimer": "This forecast is an estimate based on historical averages and trends. It is not financial advice.",
+    "based_on_months": 3
+  }
 }
 ```
 
-## Automatic Categorization
+## Categorization
 
-Transactions are categorized by matching keywords in the description:
+Transactions are auto-categorized by keyword matching:
 
-| Category       | Keywords                                      |
-|----------------|-----------------------------------------------|
-| salary         | salary, wages, payroll                        |
-| client_payment | client, invoice, payment received, transfer in|
-| rent           | rent, lease, landlord                         |
-| utilities      | electric, water, internet, airtime, data      |
-| salaries       | staff, employee, worker                       |
-| inventory      | stock, inventory, supplies, purchase          |
-| marketing      | ads, marketing, promotion, facebook ads       |
-| transport      | fuel, uber, transport, logistics              |
-| loan_repayment | loan payment, repayment, credit               |
+| Category | Keywords |
+|----------|----------|
+| salary | salary, wages, payroll, income, earning |
+| food | food, restaurant, grocery, meal, lunch, dinner, cafe |
+| transport | fuel, uber, transport, logistics, bus, taxi, parking |
+| utilities | electric, electricity, water, internet, airtime, data |
+| shopping | shopping, store, shop, market, purchase, mall |
+| entertainment | entertainment, movie, netflix, spotify, game, bar |
+| healthcare | hospital, clinic, pharmacy, health, medical, doctor |
+| education | school, university, education, tuition, course, book |
+| transfers | transfer, sent, received, send, wire, remittance |
+| bills | bill, subscription, fee, rent, lease, insurance |
+| other | (fallback) |
 
-Transactions that match no keywords are marked as `uncategorized`.
+## Database Schema
+
+**transactions** table (Supabase PostgreSQL):
+
+```sql
+create table transactions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) not null,
+  date date not null,
+  description text not null,
+  type text not null check (type in ('income', 'expense')),
+  amount numeric not null check (amount > 0),
+  category text not null default 'other',
+  balance numeric,
+  source text not null default 'csv',
+  created_at timestamptz default now()
+);
+
+alter table transactions enable row level security;
+
+create policy "Users can access own transactions"
+  on transactions for all
+  using (auth.uid() = user_id);
+```
 
 ## Environment Variables
 
-| Variable | Required | Default | Description        |
-|----------|----------|---------|--------------------|
-| `PORT`   | No       | `5000`  | Server port number |
-
-No `.env` file is required for local development.
+```
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-anon-or-service-key
+SECRET_KEY=your-flask-secret-key
+CORS_ORIGINS=http://localhost:3000,http://localhost:5000
+PORT=5000
+```
 
 ## Local Development
 
-### 1. Clone the repository
+### 1. Clone
 
 ```bash
 git clone https://github.com/Omatsulijoshua/Wema-Cash-Flow.git
 cd Wema-Cash-Flow
 ```
 
-### 2. Create a virtual environment
+### 2. Setup
 
 ```bash
-python -m venv backend/.venv
-```
-
-### 3. Activate the virtual environment
-
-```bash
+cd backend
+python -m venv .venv
 # Windows
-backend\.venv\Scripts\activate
-
+.venv\Scripts\activate
 # macOS/Linux
-source backend/.venv/bin/activate
-```
+source .venv/bin/activate
 
-### 4. Install dependencies
-
-```bash
 pip install -r requirements.txt
 ```
 
-### 5. Run the server
+### 3. Configure
 
 ```bash
-python backend/app.py
+cp .env.example .env
+```
+
+Fill in your Supabase URL and anon key.
+
+### 4. Run
+
+```bash
+python run.py
 ```
 
 Server starts at `http://localhost:5000`.
 
-### 6. Verify
+### 5. Test
 
 ```bash
-curl http://localhost:5000/api/health
+python -m pytest tests/ -v
 ```
-
-## API Testing
-
-**Browser** — Open directly for GET endpoints:
-- `http://localhost:5000`
-- `http://localhost:5000/api/health`
-- `http://localhost:5000/api/test`
-- `http://localhost:5000/api/transactions`
-- `http://localhost:5000/api/insights`
-- `http://localhost:5000/api/categories`
-
-**curl:**
-
-```bash
-curl http://localhost:5000/
-curl http://localhost:5000/api/health
-curl http://localhost:5000/api/test
-
-# Add a transaction
-curl -X POST http://localhost:5000/api/transactions \
-  -H "Content-Type: application/json" \
-  -d '{"description": "Client Payment", "amount": 450000, "type": "income"}'
-
-# Simulate transactions
-curl -X POST http://localhost:5000/api/transactions/simulate
-
-# Get insights
-curl http://localhost:5000/api/insights
-```
-
-**Postman / Insomnia** — Send GET and POST requests to the endpoints above.
 
 ## Flutter Integration
 
-The Flutter app communicates with this backend via REST API. All responses are JSON.
+**Base URL (Android emulator):** `http://10.0.2.2:5000`
 
-**Base URL (local):**
+**Base URL (iOS simulator):** `http://localhost:5000`
 
+**Base URL (deployed):** `https://your-deployment.vercel.app`
+
+**Headers:**
 ```
-http://10.0.2.2:5000
-```
-
-> For Android emulator, `localhost` refers to the emulator itself. Use `10.0.2.2` to reach the host machine. iOS simulator uses `localhost` normally.
-
-**Base URL (deployed):**
-
-```
-https://your-deployment-url.vercel.app
+Content-Type: application/json
+Authorization: Bearer <supabase_access_token>
 ```
 
-**Example Flutter request:**
-
+**Example — Import CSV:**
 ```dart
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-
-final response = await http.get(
-  Uri.parse('http://10.0.2.2:5000/api/test'),
-);
-final data = json.decode(response.body);
+var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/api/transactions/import'));
+request.headers['Authorization'] = 'Bearer $token';
+request.files.add(await http.MultipartFile.fromPath('file', csvFilePath));
+var response = await request.send();
 ```
 
-**Example: Load transactions**
-
+**Example — Get Transactions:**
 ```dart
 final response = await http.get(
-  Uri.parse('http://10.0.2.2:5000/api/transactions'),
-);
-List transactions = json.decode(response.body);
-```
-
-**Example: Add a transaction**
-
-```dart
-final response = await http.post(
-  Uri.parse('http://10.0.2.2:5000/api/transactions'),
-  headers: {'Content-Type': 'application/json'},
-  body: json.encode({
-    'description': 'Client Payment',
-    'amount': 450000,
-    'type': 'income',
-  }),
+  Uri.parse('$baseUrl/api/transactions?page=1&page_size=20'),
+  headers: {'Authorization': 'Bearer $token'},
 );
 ```
 
 ## Deployment
 
-The project is configured for Vercel. The server binds to `0.0.0.0` and uses the platform-provided `PORT` environment variable.
+The server binds to `0.0.0.0` and reads the `PORT` environment variable.
 
-### Deploy to Vercel
+**Render:**
+```
+Build command: cd backend && pip install -r requirements.txt
+Start command: cd backend && gunicorn run:app --bind 0.0.0.0:$PORT
+```
 
-1. Push to GitHub
-2. Go to [vercel.com](https://vercel.com)
-3. Import the repository
-4. Deploy
-
-See `backend/DEPLOY.md` for detailed deployment instructions.
-
-## Security
-
-**Implemented:**
-
-- CORS enabled for cross-origin Flutter requests
-
-**Planned:**
-
-- JWT authentication
-- Password hashing (bcrypt)
-- Input validation
-- Rate limiting
-- Environment variable management
-
-## Development Roadmap
-
-- [x] Flask API foundation
-- [x] Connectivity test endpoints
-- [x] Transaction CRUD (in-memory)
-- [x] Automatic transaction categorization
-- [x] Cash-flow insights
-- [x] CORS configuration
-- [x] Vercel deployment config
-- [ ] Persistent database (PostgreSQL)
-- [ ] Authentication (JWT)
-- [ ] Transaction ingestion from file
-- [ ] Advanced financial analytics
-- [ ] Cash-flow forecasting
-- [ ] Flutter integration
-- [ ] Production deployment
-
-## Contributing
-
-1. Create a feature branch from `master`
-2. Make your changes
-3. Test locally
-4. Submit a pull request
-
-Keep changes focused. One feature or fix per PR.
+**Vercel:** Configured via `vercel.json`. Auto-deploys on push to `master`.
 
 ## License
 
